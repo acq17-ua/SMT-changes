@@ -37,7 +37,7 @@ def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
     
     return x, y
 
-def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
+def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
     x = []
     y = []
     loaded_dataset = datasets.load_dataset(dataset, split=split)
@@ -48,6 +48,9 @@ def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
         # adjust width to 512
         # then height to corresponding value to keep ratio
         img = cv2.resize(img, (512, max(512, round(img.shape[0]*512/img.shape[1])))
+        # add margin
+        delta_height = 512 - img.shape[0]
+        img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
 
         y.append([content + '\n' for content in krn_content.split("\n")])
         x.append(img)
@@ -141,7 +144,8 @@ class GrandStaffSingleSystem(OMRIMG2SEQDataset):
     def __init__(self, data_path, split, augment=False) -> None:
         self.augment = augment
         self.teacher_forcing_error_rate = 0.2
-        self.x, self.y = load_set(data_path, split)
+        #self.x, self.y = load_set(data_path, split)
+        self.x, self.y = load_set_margin(data_path, split)
         self.y = self.preprocess_gt(self.y)
         self.tensorTransform = transforms.ToTensor()
         self.num_sys_gen = 1
