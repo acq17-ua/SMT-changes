@@ -36,7 +36,24 @@ def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
         x.append(img)
     
     return x, y
-        
+
+def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
+    x = []
+    y = []
+    loaded_dataset = datasets.load_dataset(dataset, split=split)
+    for sample in progress.track(loaded_dataset):
+        krn_content = sample['transcription']
+        img = np.array(sample['image'])
+
+        # adjust width to 512
+        # then height to corresponding value to keep ratio
+        img = cv2.resize(img, (512, max(512, round(img.shape[0]*512/img.shape[1])))
+
+        y.append([content + '\n' for content in krn_content.split("\n")])
+        x.append(img)
+    
+    return x, y
+
 def batch_preparation_img2seq(data):
     images = [sample[0] for sample in data]
     dec_in = [sample[1] for sample in data]
