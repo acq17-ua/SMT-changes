@@ -47,9 +47,9 @@ def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 5
 
         # adjust width to 512
         # then height to corresponding value to keep ratio
-        img = cv2.resize(img, (512, max(512, round(img.shape[0]*512/img.shape[1])))
+        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1])))
         # add margin
-        delta_height = 512 - img.shape[0]
+        delta_height = fixed_size[1] - img.shape[0]
         img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
 
         y.append([content + '\n' for content in krn_content.split("\n")])
