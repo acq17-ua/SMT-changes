@@ -4,8 +4,9 @@ import numpy as np
 from torch.nn.init import xavier_uniform_
 from transformers import ConvNextConfig, ConvNextModel, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from transformers import Swinv2Config, Swinv2Model   # for SwinT
 
-from .configuration_smt import SMTConfig
+from .configuration_smt import SMTOutputTConfig
 
 class PositionalEncoding2D(nn.Module):
 
@@ -329,9 +330,12 @@ class SMTModelForCausalLM(PreTrainedModel):
 
     def __init__(self, config:SMTConfig):
         super().__init__(config)
-        #self.encoder = ConvNextEncoder(config.in_channels, stem_features=64, depths=[4,6], widths=[128, 256])
-        next_config = ConvNextConfig(num_channels=config.in_channels, num_stages=3, hidden_sizes=[64, 128, 256], depths=[3,3,9])
-        self.encoder = ConvNextModel(next_config)
+
+        # default config is equivalent to tiny SwinT                               # double, bc images are double too
+                                                                                   #             # 4 by default, but im putting what it was on neXT          
+        swin_config = Swinv2Config(num_channels=config.in_channels, image_size=512, patch_size=8)
+        self.encoder = Swinv2Model(swin_config)
+
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
                                maxlen=config.maxlen, out_categories=config.out_categories, attention_window=config.maxlen + 1)
         
@@ -348,7 +352,9 @@ class SMTModelForCausalLM(PreTrainedModel):
         return self.encoder(pixel_values=x).last_hidden_state
     
     def forward_decoder(self, encoder_output, y_pred):
-        b, _, _, _ = encoder_output.size()
+
+        # deberian ser 3 dimensiones: (1,a,b)
+        b,_,_ = encoder_output.size()
         reduced_size = [s.shape[:2] for s in encoder_output]
         ylens = [len(sample) for sample in y_pred]
 
