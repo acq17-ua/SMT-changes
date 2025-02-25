@@ -37,7 +37,7 @@ def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
     
     return x, y
 
-def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
+def load_set_margin_and_flatten(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
     x = []
     y = []
     loaded_dataset = datasets.load_dataset(dataset, split=split)
@@ -47,7 +47,7 @@ def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 5
 
         # adjust width to 512
         # then height to corresponding value to keep ratio
-        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1])))
+        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
         # add margin
         delta_height = fixed_size[1] - img.shape[0]
         img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
@@ -55,7 +55,7 @@ def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 5
         y.append([content + '\n' for content in krn_content.split("\n")])
         x.append(img)
     
-    return x, y
+        return x, y
 
 def batch_preparation_img2seq(data):
     images = [sample[0] for sample in data]
@@ -144,8 +144,10 @@ class GrandStaffSingleSystem(OMRIMG2SEQDataset):
     def __init__(self, data_path, split, augment=False) -> None:
         self.augment = augment
         self.teacher_forcing_error_rate = 0.2
+        
         #self.x, self.y = load_set(data_path, split)
-        self.x, self.y = load_set_margin(data_path, split)
+        self.x, self.y = load_set_margin_and_flatten(data_path, split)
+
         self.y = self.preprocess_gt(self.y)
         self.tensorTransform = transforms.ToTensor()
         self.num_sys_gen = 1
