@@ -16,3 +16,4 @@ torchvision
 transformers
 visualizer
 datasets
+wandb
