@@ -6,7 +6,7 @@ from transformers import ConvNextConfig, ConvNextModel, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers import Swinv2Config, Swinv2Model   # for SwinT
 
-from .configuration_smt import SMTOutputTConfig
+from .configuration_smt import SMTConfig
 
 class PositionalEncoding2D(nn.Module):
 
@@ -30,6 +30,7 @@ class PositionalEncoding2D(nn.Module):
         Add 2D positional encoding to x
         x: (B, C, H, W)
         """
+        #print("x size is: ", x.shape)
         return x + self.pe[:, :, :x.size(2), :x.size(3)]
 
     def get_pe_by_size(self, h, w, device):
@@ -331,9 +332,9 @@ class SMTModelForCausalLM(PreTrainedModel):
     def __init__(self, config:SMTConfig):
         super().__init__(config)
 
-        # default config is equivalent to tiny SwinT                               # double, bc images are double too
-                                                                                   #             # 4 by default, but im putting what it was on neXT          
-        swin_config = Swinv2Config(num_channels=config.in_channels, image_size=512, patch_size=8)
+        # default config is equivalent to tiny SwinT                               
+                                                                                    # podria estar mal 
+        swin_config = Swinv2Config(num_channels=config.in_channels, embed_dim=config.d_model, image_size=512*512, patch_size=8, num_heads=[4, 8, 16, 32], output_hidden_states=True)
         self.encoder = Swinv2Model(swin_config)
 
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
@@ -349,12 +350,14 @@ class SMTModelForCausalLM(PreTrainedModel):
         self.maxlen = int(config.maxlen)
     
     def forward_encoder(self, x):
-        return self.encoder(pixel_values=x).last_hidden_state
+        #print("x size into encoder:", x.shape)
+        # vvv does expect 4 dimensions
+        return self.encoder(pixel_values=x).reshaped_hidden_states[0]   # output the embeddings, not the output of each stage
     
     def forward_decoder(self, encoder_output, y_pred):
 
-        # deberian ser 3 dimensiones: (1,a,b)
-        b,_,_ = encoder_output.size()
+        b,_,_,_ = encoder_output.size()
+        #print("x size into decoder:", encoder_output.shape)
         reduced_size = [s.shape[:2] for s in encoder_output]
         ylens = [len(sample) for sample in y_pred]
 
