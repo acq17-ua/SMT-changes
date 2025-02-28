@@ -33,7 +33,7 @@ class SMT_Trainer(L.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(list(self.model.encoder.parameters()) + list(self.model.decoder.parameters()), lr=1e-4, amsgrad=False)
     
-    def forward(self, input, last_preds) -> torch.Any:
+    def forward(self, input, last_preds):
         return self.model(input, last_preds)
     
     def training_step(self, batch):
@@ -62,7 +62,7 @@ class SMT_Trainer(L.LightningModule):
         self.preds.append(dec)
         self.grtrs.append(gt)
         
-    def on_validation_epoch_end(self, metric_name="val") -> None:
+    def on_validation_epoch_end(self, metric_name="val"):
         cer, ser, ler = compute_poliphony_metrics(self.preds, self.grtrs)
         
         random_index = random.randint(0, len(self.preds)-1)
@@ -80,8 +80,8 @@ class SMT_Trainer(L.LightningModule):
         
         return ser
     
-    def test_step(self, test_batch) -> torch.Tensor | torch.Dict[str, torch.Any] | None:
+    def test_step(self, test_batch):
         return self.validation_step(test_batch)
     
-    def on_test_epoch_end(self) -> None:
+    def on_test_epoch_end(self):
         return self.on_validation_epoch_end("test")
