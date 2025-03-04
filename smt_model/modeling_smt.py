@@ -4,7 +4,8 @@ import numpy as np
 from torch.nn.init import xavier_uniform_
 from transformers import ConvNextConfig, ConvNextModel, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
-from transformers import Swinv2Config, Swinv2Model   # for SwinT
+from transformers import Swinv2Config, Swinv2Model, ViTConfig, ViTModel
+from math import sqrt
 
 from .configuration_smt import SMTConfig
 
@@ -30,7 +31,6 @@ class PositionalEncoding2D(nn.Module):
         Add 2D positional encoding to x
         x: (B, C, H, W)
         """
-        #print("x size is: ", x.shape)
         return x + self.pe[:, :, :x.size(2), :x.size(3)]
 
     def get_pe_by_size(self, h, w, device):
@@ -332,15 +332,20 @@ class SMTModelForCausalLM(PreTrainedModel):
     def __init__(self, config:SMTConfig):
         super().__init__(config)
 
-        # default config is equivalent to tiny SwinT                               
-                                                                                    # podria estar mal 
-        swin_config = Swinv2Config(num_channels=config.in_channels, embed_dim=config.d_model, image_size=512*512, patch_size=8, num_heads=[4, 8, 16, 32], output_hidden_states=True)
-        self.encoder = Swinv2Model(swin_config)
+        vit_config = ViTConfig( num_channels=config.in_channels,
+                                hidden_size=96,
+                                num_hidden_layers=12,
+                                num_attention_heads=12,
+                                image_size=512,
+                                patch_size=16,
+                                output_hidden_states=True
+                                )
+        self.encoder = ViTModel(vit_config)
 
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
                                maxlen=config.maxlen, out_categories=config.out_categories, attention_window=config.maxlen + 1)
         
-        self.positional_2D = PositionalEncoding2D(config.d_model, config.maxh, config.maxw)
+        self.positional_2D = PositionalEncoding2D(config.d_model, int(config.maxh/16), int(config.maxw/16))
 
         self.padding_token = config.padding_token
         self.loss = nn.CrossEntropyLoss(ignore_index=self.padding_token)
@@ -352,22 +357,31 @@ class SMTModelForCausalLM(PreTrainedModel):
     def forward_encoder(self, x):
         #print("x size into encoder:", x.shape)
         # vvv does expect 4 dimensions
-        return self.encoder(pixel_values=x).reshaped_hidden_states[0]   # output the embeddings, not the output of each stage
+        outputs = self.encoder(pixel_values=x).hidden_states[0]
+        outputs = outputs[:,1:1025, :] # descartar el token de clasificacion
+        print(outputs.shape)
+        return outputs.reshape(outputs.shape[0], int(sqrt(outputs.shape[1])), int(sqrt(outputs.shape[1])), outputs.shape[2])
     
     def forward_decoder(self, encoder_output, y_pred):
 
+        print(encoder_output.shape)
         b,_,_,_ = encoder_output.size()
-        #print("x size into decoder:", encoder_output.shape)
         reduced_size = [s.shape[:2] for s in encoder_output]
         ylens = [len(sample) for sample in y_pred]
 
-        pos_features = self.positional_2D(encoder_output)
+        pos_features = self.positional_2D(encoder_output#.permute(0,3,1,2))
+        print(pos_features.shape)
         features = torch.flatten(encoder_output, start_dim=2, end_dim=3).permute(2,0,1)
         enhanced_features = features
         enhanced_features = torch.flatten(pos_features, start_dim=2, end_dim=3).permute(2,0,1)
-        output, predictions, _, _, weights = self.decoder(features, enhanced_features, y_pred[:, :], reduced_size, 
-                                                           [max(ylens) for _ in range(b)], encoder_output.size(), 
-                                                           cache=None, keep_all_weights=True)
+        output, predictions, _, _, weights = self.decoder(  features, 
+                                                            enhanced_features, 
+                                                            y_pred[:, :], 
+                                                            reduced_size, 
+                                                            [max(ylens) for _ in range(b)], 
+                                                            encoder_output.size(), 
+                                                            cache=None, 
+                                                            keep_all_weights=True)
         return SMTOutput(
             logits=predictions,
             hidden_states=output,
