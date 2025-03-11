@@ -18,6 +18,7 @@ class SMT_Trainer(L.LightningModule):
                            w2i=w2i, i2w=i2w,
                            d_model=d_model, dim_ff=dim_ff, attn_heads=4, num_dec_layers=num_dec_layers, 
                            use_flash_attn=True)
+
         self.model = SMTModelForCausalLM(self.config)
         self.padding_token = padding_token
         
@@ -26,6 +27,7 @@ class SMT_Trainer(L.LightningModule):
         
         self.save_hyperparameters()
         
+        print(f"smt_trained: config.maxh={self.config.maxh} config.maxw: {self.config.maxw} config.maxlen: {self.config.maxlen}")
         summary(self, input_size=[(1,1,self.config.maxh,self.config.maxw), (1,self.config.maxlen)], 
                 dtypes=[torch.float, torch.long])
         

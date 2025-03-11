@@ -22,7 +22,7 @@ def main(config_path):
     max_height, max_width = datamodule.train_set.get_max_hw()
     max_len = datamodule.train_set.get_max_seqlen()
 
-    model_wrapper = SMT_Trainer(maxh=int(max_height), maxw=int(max_width), maxlen=int(max_len), 
+    model_wrapper = SMT_Trainer(maxh=512, maxw=512, maxlen=max_len, 
                                 out_categories=len(datamodule.train_set.w2i), padding_token=datamodule.train_set.w2i["<pad>"], 
                                 in_channels=1, w2i=datamodule.train_set.w2i, i2w=datamodule.train_set.i2w, 
                                 d_model=96, dim_ff=256, num_dec_layers=8)
