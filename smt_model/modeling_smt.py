@@ -31,7 +31,6 @@ class PositionalEncoding2D(nn.Module):
         Add 2D positional encoding to x
         x: (B, C, H, W)
         """
-        print(f"PE x.shape: {x.shape} || PE pe.shape: {self.pe.shape}")
         return x + self.pe[:, :, :x.size(2), :x.size(3)]
 
     def get_pe_by_size(self, h, w, device):
@@ -347,11 +346,9 @@ class SMTModelForCausalLM(PreTrainedModel):
                              )
         self.encoder = ViTModel(vit_config)
 
-        print(f"boutta make decoder with d_model: {config.d_model}")
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
                                maxlen=config.maxlen, out_categories=config.out_categories, attention_window=config.maxlen + 1)
         
-        print(f"positional encoding con args: {config.d_model} {int(config.maxh/16)} {int(config.maxw/16)}" )
         self.positional_2D = PositionalEncoding2D(config.d_model, int(config.maxh/16), int(config.maxw/16))
 
         self.padding_token = config.padding_token
@@ -369,21 +366,23 @@ class SMTModelForCausalLM(PreTrainedModel):
 
         outputs = self.encoder(pixel_values=x).hidden_states[0]
         outputs = outputs[:,1:1025, :] # descartar el token de clasificacion
-        print(outputs.shape)
-        
-        return outputs.reshape(outputs.shape[0], int(sqrt(outputs.shape[1])), int(sqrt(outputs.shape[1])), outputs.shape[2])
+
+        outputs = outputs.reshape(outputs.shape[0], int(sqrt(outputs.shape[1])), int(sqrt(outputs.shape[1])), outputs.shape[2])
         # B, H, W, C
+        
+        outputs = outputs.permute(0,3,1,2)
+        # B, C, H, W
+
+        return outputs
 
     def forward_decoder(self, encoder_output, y_pred):
 
-        print(encoder_output.shape)
         b,_,_,_ = encoder_output.size()
         reduced_size = [s.shape[:2] for s in encoder_output]
         ylens = [len(sample) for sample in y_pred]
 
-        pos_features = self.positional_2D(encoder_output.permute(0,3,1,2)) # B, C, H, W [1, 96, 32, 32]
+        pos_features = self.positional_2D(encoder_output)
         #pos_features = self.positional_2D(encoder_output)
-        print(pos_features.shape)
         features = torch.flatten(encoder_output, start_dim=2, end_dim=3).permute(2,0,1)
         enhanced_features = features
         enhanced_features = torch.flatten(pos_features, start_dim=2, end_dim=3).permute(2,0,1)
