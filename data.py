@@ -3,6 +3,7 @@ import re
 import cv2
 import torch
 import numpy as np
+import pandas as pd
 import cv2
 
 import datasets
@@ -37,25 +38,57 @@ def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
     
     return x, y
 
-def load_set_margin_and_flatten(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
-    x = []
-    y = []
+def process_image_transcription(sample, fixed_size=[512,512]):
+
+    img = np.array(sample['image'])
+    sample['image'] = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
+    # add margin
+    delta_height = fixed_size[1] - sample['image'].shape[0]
+    sample['image'] = cv2.copyMakeBorder(sample['image'], 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
+    sample['transcription'] = [content + '\n' for content in sample['transcription'].split('\n')]
+
+def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
+
+    print("load_set_margin")
     loaded_dataset = datasets.load_dataset(dataset, split=split)
-    for sample in progress.track(loaded_dataset):
-        krn_content = sample['transcription']
-        img = np.array(sample['image'])
-
-        # adjust width to 512
-        # then height to corresponding value to keep ratio
-        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
-        # add margin
-        delta_height = fixed_size[1] - img.shape[0]
-        img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
-
-        y.append([content + '\n' for content in krn_content.split("\n")])
-        x.append(img)
+    #loaded_dataset.map(process_image_transcription, fn_kwargs={'fixed_size':fixed_size})
+    loaded_dataset = loaded_dataset.to_dict()
     
-        return x, y
+    x, y = list(), list()
+    print("x,y")
+    
+    for i in range(len(loaded_dataset['image'])):
+
+        print(f"[{i}]")
+
+        print(f"{len(loaded_dataset['image'])} {loaded_dataset['image'][0].keys()}" )
+
+
+        img = np.array(loaded_dataset['image'][0]['bytes'])
+        print(img)
+        print(img.shape)
+
+        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
+        delta_height = fixed_size[1] - loaded_dataset['image'][0]['bytes'].shape[0]
+        img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
+        
+        transcription = [content + '\n' for content in loaded_dataset['transcription'][0].split('\n')]
+
+        x.append(img)
+        y.append(transcription)
+        del loaded_dataset['image'][0]
+        del loaded_dataset['transcription'][0]
+
+    return x,y
+
+'''
+def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
+
+    loaded_dataset = datasets.load_dataset(dataset, split=split)
+    loaded_dataset.map(process_image_transcription, fn_kwargs={'fixed_size':fixed_size})
+    print("bouta return")
+    return loaded_dataset[:]['image'], loaded_dataset[:]['transcription']
+'''
 
 def batch_preparation_img2seq(data):
     images = [sample[0] for sample in data]
@@ -146,8 +179,8 @@ class GrandStaffSingleSystem(OMRIMG2SEQDataset):
         self.teacher_forcing_error_rate = 0.2
         
         #self.x, self.y = load_set(data_path, split)
-        self.x, self.y = load_set_margin_and_flatten(data_path, split)
-
+        self.x, self.y = load_set_margin(data_path, split)
+        print("returned")
         self.y = self.preprocess_gt(self.y)
         self.tensorTransform = transforms.ToTensor()
         self.num_sys_gen = 1
