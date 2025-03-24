@@ -3,8 +3,8 @@ import re
 import cv2
 import torch
 import numpy as np
-import pandas as pd
 import cv2
+import os
 
 import datasets
 from ExperimentConfig import ExperimentConfig
@@ -14,81 +14,54 @@ from rich import progress
 from lightning import LightningDataModule
 from torch.utils.data import Dataset
 from torchvision import transforms
+from PIL import Image as pil_image
 
-def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=None):
-    x = []
-    y = []
-    loaded_dataset = datasets.load_dataset(dataset, split=split)
-    for sample in progress.track(loaded_dataset):
-        krn_content = sample['transcription']
-        img = np.array(sample['image'])
-        if fixed_size != None:
-            width = fixed_size[1]
-            height = fixed_size[0]
-        elif img.shape[1] > 3056:
-            width = int(np.ceil(3056 * reduce_ratio))
-            height = int(np.ceil(max(img.shape[0], 256) * reduce_ratio))
-        else:
-            width = int(np.ceil(img.shape[1] * reduce_ratio))
-            height = int(np.ceil(max(img.shape[0], 256) * reduce_ratio))
+def prepare_data(sample, reduce_ratio=1.0, fixed_size=(512,512)):
 
-        img = cv2.resize(img, (width, height))
-        y.append([content + '\n' for content in krn_content.split("\n")])
-        x.append(img)
-    
-    return x, y
-
-def process_image_transcription(sample, fixed_size=[512,512]):
-
+    #print("doing a sample")
     img = np.array(sample['image'])
-    sample['image'] = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
-    # add margin
-    delta_height = fixed_size[1] - sample['image'].shape[0]
-    sample['image'] = cv2.copyMakeBorder(sample['image'], 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
-    sample['transcription'] = [content + '\n' for content in sample['transcription'].split('\n')]
+    img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
+    delta_height = fixed_size[1] - img.shape[0]
+    sample['image'] = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
 
-def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
-
-    print("load_set_margin")
-    loaded_dataset = datasets.load_dataset(dataset, split=split)
-    #loaded_dataset.map(process_image_transcription, fn_kwargs={'fixed_size':fixed_size})
-    loaded_dataset = loaded_dataset.to_dict()
     
-    x, y = list(), list()
-    print("x,y")
-    
-    for i in range(len(loaded_dataset['image'])):
+    krn = sample['transcription']
 
-        print(f"[{i}]")
+    #krn = [content + '\n' for content in krn.split("\n")]
+    #krn = "".join(krn)
 
-        print(f"{len(loaded_dataset['image'])} {loaded_dataset['image'][0].keys()}" )
+    krn = re.sub(r'(?<=\=)\d+', '', krn)
+    krn = krn.replace(" ", " <s> ")
+    krn = krn.replace("·", "")
+    krn = krn.replace("\t", " <t> ")
+    krn = krn.replace("\n", " <b> ")
 
+    #print(f"before: {krn}")
+    krn = krn.split(" ")
 
-        img = np.array(loaded_dataset['image'][0]['bytes'])
-        print(img)
-        print(img.shape)
+    #print(f"after: {krn}")
 
-        img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
-        delta_height = fixed_size[1] - loaded_dataset['image'][0]['bytes'].shape[0]
-        img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
-        
-        transcription = [content + '\n' for content in loaded_dataset['transcription'][0].split('\n')]
+    sample["image"] = pil_image.fromarray(img)
+    sample["transcription"] = ['<bos>'] + krn + ['<eos>']
 
-        x.append(img)
-        y.append(transcription)
-        del loaded_dataset['image'][0]
-        del loaded_dataset['transcription'][0]
+    # print("Ground truth processed")
 
-    return x,y
+    return sample
 
-'''
-def load_set_margin(dataset, split="train", reduce_ratio=1.0, fixed_size=(512, 512)):
-
+def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
+    print("loading set")
     loaded_dataset = datasets.load_dataset(dataset, split=split)
-    loaded_dataset.map(process_image_transcription, fn_kwargs={'fixed_size':fixed_size})
-    print("bouta return")
-    return loaded_dataset[:]['image'], loaded_dataset[:]['transcription']
-'''
+    #print(loaded_dataset.cleanup_cache_files())
+    print("into map")
+    loaded_dataset = loaded_dataset.map(prepare_data, fn_kwargs={"fixed_size": fixed_size})
+
+    # num_samples = len(loaded_dataset)
+    # for sample_idx in progress.track(range(num_samples)):
+        # s = prepare_data(loaded_dataset[sample_idx], reduce_ratio, fixed_size)
+        # loaded_dataset[sample_idx]["image"] = s["image"]
+        # loaded_dataset[sample_idx]["transcription"] = s["transcription"]
+
+    return loaded_dataset
 
 def batch_preparation_img2seq(data):
     images = [sample[0] for sample in data]
@@ -144,7 +117,7 @@ class OMRIMG2SEQDataset(Dataset):
             x = convert_img_to_tensor(self.x[index])
         
         y = torch.from_numpy(np.asarray([self.w2i[token] for token in self.y[index]]))
-        decoder_input = self.apply_teacher_forcing(y)
+        decoder_input = sel.apply_teacher_forcing(y)
         return x, decoder_input, y
 
     def get_max_hw(self):
@@ -177,11 +150,7 @@ class GrandStaffSingleSystem(OMRIMG2SEQDataset):
     def __init__(self, data_path, split, augment=False) -> None:
         self.augment = augment
         self.teacher_forcing_error_rate = 0.2
-        
-        #self.x, self.y = load_set(data_path, split)
-        self.x, self.y = load_set_margin(data_path, split)
-        print("returned")
-        self.y = self.preprocess_gt(self.y)
+        self.data = load_set(data_path, split)
         self.tensorTransform = transforms.ToTensor()
         self.num_sys_gen = 1
         self.fixed_systems_num = False
@@ -190,24 +159,44 @@ class GrandStaffSingleSystem(OMRIMG2SEQDataset):
         return [re.sub(r'(?<=\=)\d+', '', token) for token in tokens]
 
     def get_width_avgs(self):
-        widths = [image.shape[1] for image in self.x]
+        widths = [s["image"].size[0] for s in self.data]
         return np.average(widths), np.max(widths), np.min(widths)
 
+    def get_max_hw(self):
+        m_width = np.max([s["image"].size[0] for s in self.data])
+        m_height = np.max([s["image"].size[1] for s in self.data])
+
+        return m_height, m_width
+
+    def get_max_seqlen(self):
+        return np.max([len(s["transcription"]) for s in self.data])
+
     def __getitem__(self, index):
-        x = self.x[index]
-        y = self.y[index]
+        sample = self.data[index]
+
+        x = np.array(sample["image"])
+        y = sample["transcription"]
 
         if self.augment:
             x = augment(x)
         else:
             x = convert_img_to_tensor(x)
         
-        y = torch.from_numpy(np.asarray([self.w2i[token] for token in y]))
+        try:
+            y = torch.from_numpy(np.asarray([self.w2i[token] for token in y]))
+        except KeyError:
+            print(y)
+            raise
+
+
         decoder_input = self.apply_teacher_forcing(y)
         return x, decoder_input, y
     
     def __len__(self):
-        return len(self.x)
+        return len(self.data)
+
+    def get_gt(self):
+        return self.data["transcription"]
     
     def preprocess_gt(self, Y):
         for idx, krn in enumerate(Y):
@@ -228,7 +217,7 @@ class GrandStaffDataset(LightningDataModule):
         self.data_path = config.data_path
         self.vocab_name = config.vocab_name
         self.batch_size = config.batch_size
-        self.num_workers = config.num_workers
+        self.num_workers = 8#config.num_workers
         self.train_set = GrandStaffSingleSystem(data_path=self.data_path, split="train", augment=True)
         self.val_set = GrandStaffSingleSystem(data_path=self.data_path, split="val",)
         self.test_set = GrandStaffSingleSystem(data_path=self.data_path, split="test",)
@@ -247,10 +236,3 @@ class GrandStaffDataset(LightningDataModule):
     
     def test_dataloader(self):
         return torch.utils.data.DataLoader(self.test_set, batch_size=self.batch_size, num_workers=self.num_workers, collate_fn=batch_preparation_img2seq)
-
-
-
-
-     
-
-
