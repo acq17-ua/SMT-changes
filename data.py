@@ -22,7 +22,7 @@ def prepare_data(sample, reduce_ratio=1.0, fixed_size=(512,512)):
     img = np.array(sample['image'])
     img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
     delta_height = fixed_size[1] - img.shape[0]
-    sample['image'] = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
+    img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
 
     
     krn = sample['transcription']
@@ -51,7 +51,7 @@ def prepare_data(sample, reduce_ratio=1.0, fixed_size=(512,512)):
 def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
     print("loading set")
     loaded_dataset = datasets.load_dataset(dataset, split=split)
-    #print(loaded_dataset.cleanup_cache_files())
+    print(loaded_dataset.cleanup_cache_files())
     print("into map")
     loaded_dataset = loaded_dataset.map(prepare_data, fn_kwargs={"fixed_size": fixed_size})
 
