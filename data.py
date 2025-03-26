@@ -51,7 +51,7 @@ def prepare_data(sample, reduce_ratio=1.0, fixed_size=(512,512)):
 def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
     print("loading set")
     loaded_dataset = datasets.load_dataset(dataset, split=split)
-    print(loaded_dataset.cleanup_cache_files())
+    #print(loaded_dataset.cleanup_cache_files())
     print("into map")
     loaded_dataset = loaded_dataset.map(prepare_data, fn_kwargs={"fixed_size": fixed_size})
 

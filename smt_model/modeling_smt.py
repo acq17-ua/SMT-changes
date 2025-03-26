@@ -6,6 +6,7 @@ from transformers import ConvNextConfig, ConvNextModel, PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 from transformers import Swinv2Config, Swinv2Model, ViTConfig, ViTModel
 from math import sqrt
+import sys
 
 from .configuration_smt import SMTConfig
 
@@ -332,16 +333,18 @@ class SMTModelForCausalLM(PreTrainedModel):
     def __init__(self, config:SMTConfig):
         super().__init__(config)
 
-        '''
-        next_config = ConvNextConfig(num_channels=config.in_channels, num_stages=3, hidden_sizes=[64, 128, 256], depths=[3,3,9])
-        self.encoder = ConvNextModel(next_config)
-        '''
+        patchsize = int(sys.argv[3])
+        num_hidden_layers = int(sys.argv[4])
+        num_hidden_heads = int(sys.argv[5])
+
+        print(f"ps: {patchsize} hi_layrs: {num_hidden_layers} hi_heads: {num_hidden_heads}")
+
         vit_config = ViTConfig( num_channels=config.in_channels,
                                 hidden_size=96,
-                                num_hidden_layers=12,
-                                num_attention_heads=12,
+                                num_hidden_layers=num_hidden_layers, # 12
+                                num_attention_heads=num_hidden_heads, #12
                                 image_size=512,
-                                patch_size=16,
+                                patch_size=patchsize, # 16
                                 output_hidden_states=True
                              )
         self.encoder = ViTModel(vit_config)
@@ -349,7 +352,7 @@ class SMTModelForCausalLM(PreTrainedModel):
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
                                maxlen=config.maxlen, out_categories=config.out_categories, attention_window=config.maxlen + 1)
         
-        self.positional_2D = PositionalEncoding2D(config.d_model, int(config.maxh/16), int(config.maxw/16))
+        self.positional_2D = PositionalEncoding2D(config.d_model, int(config.maxh/patchsize), int(config.maxw/patchsize))
 
         self.padding_token = config.padding_token
         self.loss = nn.CrossEntropyLoss(ignore_index=self.padding_token)
