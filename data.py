@@ -16,15 +16,53 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from PIL import Image as pil_image
 
-def prepare_data(sample, reduce_ratio=1.0, fixed_size=(512,512)):
+def prepare_data_vanilla(sample, reduce_ratio=1.0, fixed_size=None):
 
-    #print("doing a sample")
+
+    img = np.array(sample['image'])
+    if fixed_size != None:
+        width = fixed_size[1]
+        height = fixed_size[0]
+    elif img.shape[1] > 3056:
+        width = int(np.ceil(3056 * reduce_ratio))
+        height = int(np.ceil(max(img.shape[0], 256) * reduce_ratio))
+    else:
+        width = int(np.ceil(img.shape[1] * reduce_ratio))
+        height = int(np.ceil(max(img.shape[0], 256) * reduce_ratio))
+
+    img = cv2.resize(img, (width, height))
+
+    krn = sample['transcription']
+
+    #krn = [content + '\n' for content in krn.split("\n")]
+    #krn = "".join(krn)
+
+    krn = re.sub(r'(?<=\=)\d+', '', krn)
+    krn = krn.replace(" ", " <s> ")
+    krn = krn.replace("·", "")
+    krn = krn.replace("\t", " <t> ")
+    krn = krn.replace("\n", " <b> ")
+
+    #print(f"before: {krn}")
+    krn = krn.split(" ")
+
+    #print(f"after: {krn}")
+
+    sample["image"] = pil_image.fromarray(img)
+    sample["transcription"] = ['<bos>'] + krn + ['<eos>']
+
+    # print("Ground truth processed")
+
+    return sample
+
+
+def prepare_data_margin(sample, reduce_ratio=1.0, fixed_size=None):
+
     img = np.array(sample['image'])
     img = cv2.resize(img, (fixed_size[0], min(fixed_size[1], round(img.shape[0]*fixed_size[0]/img.shape[1]))))
     delta_height = fixed_size[1] - img.shape[0]
     img = cv2.copyMakeBorder(img, 0, delta_height, 0, 0, cv2.BORDER_CONSTANT)
 
-    
     krn = sample['transcription']
 
     #krn = [content + '\n' for content in krn.split("\n")]
@@ -53,7 +91,8 @@ def load_set(dataset, split="train", reduce_ratio=1.0, fixed_size=(512,512)):
     loaded_dataset = datasets.load_dataset(dataset, split=split)
     #print(loaded_dataset.cleanup_cache_files())
     print("into map")
-    loaded_dataset = loaded_dataset.map(prepare_data, fn_kwargs={"fixed_size": fixed_size})
+    loaded_dataset = loaded_dataset.map(prepare_data_margin, fn_kwargs={"fixed_size": fixed_size})
+    #loaded_dataset = loaded_dataset.map(prepare_data_vanilla)
 
     # num_samples = len(loaded_dataset)
     # for sample_idx in progress.track(range(num_samples)):
