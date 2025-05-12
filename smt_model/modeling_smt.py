@@ -328,51 +328,54 @@ class SMTOutput(CausalLMOutputWithCrossAttentions):
     """This is a nice output wrapper"""
 
 class SMTModelForCausalLM(PreTrainedModel):
+
     config_class = SMTConfig
 
     def __init__(self, config:SMTConfig):
+        
         super().__init__(config)
+        
+        #patchsize = int(sys.argv[3])
+        #num_hidden_layers = int(sys.argv[4])
+        #num_hidden_heads = int(sys.argv[5])
 
-        '''
-        patchsize = int(sys.argv[3])
-        num_hidden_layers = int(sys.argv[4])
-        num_hidden_heads = int(sys.argv[5])
+        #print(f"ps: {patchsize} hi_layrs: {num_hidden_layers} hi_heads: {num_hidden_heads}")
 
-        print(f"ps: {patchsize} hi_layrs: {num_hidden_layers} hi_heads: {num_hidden_heads}")
+        #vit_config = ViTConfig( num_channels=config.in_channels,
+        #                        hidden_size=128,
+        #                        num_hidden_layers=num_hidden_layers, # 12
+        #                        num_attention_heads=num_hidden_heads, #12
+        #                        image_size=512,
+        #                        patch_size=patchsize, # 16
+        #                        output_hidden_states=True
+        #                     )
+        #self.encoder = ViTModel(vit_config)
+        #'''
 
-        vit_config = ViTConfig( num_channels=config.in_channels,
-                                hidden_size=128,
-                                num_hidden_layers=num_hidden_layers, # 12
-                                num_attention_heads=num_hidden_heads, #12
-                                image_size=512,
-                                patch_size=patchsize, # 16
-                                output_hidden_states=True
-                             )
-        self.encoder = ViTModel(vit_config)
-        '''
-
-        '''
-        next_config = ConvNextConfig(num_channels=config.in_channels, num_stages=3, hidden_sizes=[64, 128, 256], depths=[3,3,9])
+        #'''
+        next_config = ConvNextConfig(num_channels=config.in_channels, num_stages=3, hidden_sizes=[64, 128, 256], depths=[3,3,3])
+        #next_config = ConvNextConfig(num_channels=config.in_channels, num_stages=1, hidden_sizes=[64, 128], depths=[3,3])
         self.encoder = ConvNextModel(next_config)
-        '''
+        #'''
 
         #patch_size = int(sys.argv[3])
        
         #'''
-        num_heads   = { '1':[2,4,4], 
-                        '2':[2,4,8],
-                        '3':[3,6,9]}[sys.argv[3]]
-        depths      = { '1':[2,2,2],
-                        '2':[2,2,4]}[sys.argv[4]]
-        '''
+        #num_heads   = { '1':[2,4,4], 
+        #                '2':[2,4,8],
+        #                '3':[3,6,9]}[sys.argv[3]]
+        #depths      = { '1':[2,2,2],
+        #                '2':[2,2,4]}[sys.argv[4]]
+        #'''
 
+        """         
         num_heads   = { '1':[1], 
                         '2':[1],
                         '3':[1]}[sys.argv[3]]
         depths      = { '1':[1],
                         '2':[1]}[sys.argv[4]]
 
-        '''
+        #'''
 
         swin_config = Swinv2Config( num_channels=config.in_channels, 
                                     embed_dim=config.d_model, 
@@ -381,7 +384,8 @@ class SMTModelForCausalLM(PreTrainedModel):
                                     num_heads=num_heads,
                                     depths=depths,
                                     output_hidden_states=True)
-        self.encoder = Swinv2Model(swin_config)
+        self.encoder = Swinv2Model(swin_config) 
+        """
         
 
         self.decoder = Decoder(d_model=config.d_model, dim_ff=config.dim_ff, n_layers=config.num_dec_layers, 
@@ -416,10 +420,10 @@ class SMTModelForCausalLM(PreTrainedModel):
         '''
     
         # for NeXT
-        #return self.encoder(pixel_values=x).last_hidden_state
+        return self.encoder(pixel_values=x).last_hidden_state
 
         # for SWin
-        return self.encoder(pixel_values=x).reshaped_hidden_states[0]
+        #return self.encoder(pixel_values=x).reshaped_hidden_states[0]
     
     def forward_decoder(self, encoder_output, y_pred):
 
@@ -459,10 +463,11 @@ class SMTModelForCausalLM(PreTrainedModel):
         predicted_sequence = torch.from_numpy(np.asarray([self.w2i['<bos>']])).to(input.device).unsqueeze(0)
         encoder_output = self.forward_encoder(input)
         text_sequence = []
+
         for i in range(self.maxlen - predicted_sequence.shape[-1]):
             predictions = self.forward_decoder(encoder_output, predicted_sequence.long())
 
-            print(f"CA at i={i}: {len(predictions.cross_attentions)} \n{predictions.cross_attentions}")
+            #print(f"CA at i={i}: type:{type(predictions.cross_attentions)},[0]:{type(predictions.cross_attentions[0])} {(predictions.cross_attentions[0].shape)} \n{predictions.cross_attentions}")
 
             # ^^ de aqui sacas los pesos de la cross attention 
 
@@ -474,4 +479,5 @@ class SMTModelForCausalLM(PreTrainedModel):
                 break
             text_sequence.append(self.i2w[predicted_token])
         
+        #print(f"final single CA shape: {predictions.cross_attentions[0].shape} len: {len(predictions.cross_attentions)}")
         return text_sequence, predictions

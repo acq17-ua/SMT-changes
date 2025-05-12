@@ -25,7 +25,7 @@ def main(config_path):
     model_wrapper = SMT_Trainer(maxh=512, maxw=512, maxlen=max_len, 
                                 out_categories=len(datamodule.train_set.w2i), padding_token=datamodule.train_set.w2i["<pad>"], 
                                 in_channels=1, w2i=datamodule.train_set.w2i, i2w=datamodule.train_set.i2w, 
-                                d_model=128, dim_ff=256, num_dec_layers=8)
+                                d_model=256, dim_ff=96, num_dec_layers=8)
     
     wandb_logger = WandbLogger(project='SMT_Reimplementation', group="GrandStaff", name=f"SMT_NexT_GrandStaff", log_model=False)
 

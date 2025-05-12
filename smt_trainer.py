@@ -27,7 +27,6 @@ class SMT_Trainer(L.LightningModule):
         
         self.save_hyperparameters()
         
-        print(f"smt_trained: config.maxh={self.config.maxh} config.maxw: {self.config.maxw} config.maxlen: {self.config.maxlen}")
         summary(self, input_size=[(1,1,self.config.maxh,self.config.maxw), (1,self.config.maxlen)], 
                 dtypes=[torch.float, torch.long])
         
