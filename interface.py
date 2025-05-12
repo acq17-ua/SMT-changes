@@ -1,12 +1,13 @@
 from smt_trainer import SMT_Trainer
-import gradio as gr
 import torch
-import numpy as np
-from numpy.typing import ArrayLike
-from math import sqrt
-import cv2
-from cv2.typing import MatLike
 
+from math import sqrt
+import gradio as gr
+import numpy as np
+import pandas as pd
+import cv2
+from numpy.typing import ArrayLike
+from cv2.typing import MatLike
 
 CA_layers = list()
 
@@ -51,18 +52,24 @@ def overlay(background:np.ndarray, overlay:np.ndarray, alpha=1):
 	# also divide by 255 because somehow it needs a float image even though it gives int images
 	return (background[:,:,:3]/255.0).astype(np.float32)
 
-def generate_CA_images(token_idx, image):
+def generate_CA_images(token_idx, image, multiplier=1):
 
 	global CA_layers
 
 	CA_final_images = []
 
-	# resize to fit input image (value from 0-1)
+	# resize to fit input image (value in 0-1)
 	masks = [ cv2.resize(CA_layers[layer_idx][token_idx],
 							interpolation=cv2.INTER_NEAREST,
 							dsize=(image.shape[1], image.shape[0])) for layer_idx in range(0, len(CA_layers)) ]
 
-	# (value from 0-255)
+	# apply multiplier
+	masks = [ mask*multiplier for mask in masks ]
+	# normalize values above 1
+	
+	masks = [ mask/np.max(mask) if np.max(mask)>1 else mask for mask in masks ]
+
+	# (convert to values in 0-255)
 	masks = [ (mask*255.0) for mask in masks ]
 	masks = np.round(masks).astype(np.uint8)
 
@@ -123,62 +130,102 @@ def make_predictions(checkpoint, input_image):
 	CA_layers.append(overall)
 
 	return "\t".join(predicted_seq)
+	#return np.array(predicted_seq)
+	#return pd.DataFrame(predicted_seq)
+
+def test():
+	print("called test")
+
+def save_selected_tab(index):
+
+	print(f"index: {index}")
+	return index
 
 def define_interface():
 
-	predicted_seq_output=None
-	image_input=None
+	# main components
+	predicted_seq_output = gr.Textbox(label="Predicted Sequence", interactive=False)
+	image_input = gr.Image(label="Input Image")
+	tabs = gr.Tabs()
+	
+	# knob components
+	token_slider = gr.Slider(minimum=0, maximum=0, step=1, 
+							label="Pick a token", 
+							info="Select a predicted token to visualize the attention it pays in the input sample",
+							visible=False)
+
+	intensifier_slider = gr.Slider(minimum=1, maximum=10, step=1,
+									label="Intensify attention",
+									info="Use this slider to intensify the attention values to better see differences",
+									visible=False)
 
 	with gr.Blocks() as page:
 
+		selected_tab = gr.Number(value=1, visible=False)
+		tabs.select(test)
+		#tabs.select(fn=( lambda : tabs.selected ), outputs=[selected_tab])
 		gr.Markdown("# Cross Attention Viewer")
 
 		with gr.Row():
 
 			with gr.Column():
 
-				predicted_seq_output = gr.Textbox(label="Predicted Sequence", interactive=False)
-				image_input = gr.Image(label="Input Image")
+				predicted_seq_output.render() #= gr.Textbox(label="Predicted Sequence", interactive=False)
+				#predicted_seq_output = gr.Numpy(label="Predicted sequence", headers=["a", "b"], value=["c", "d"], column_widths="80px" )
+				#predicted_seq_output.style
+				image_input.render()
 
 				gr.Interface(make_predictions,
 							inputs=[gr.File(label="Model Checkpoint File"),
 									image_input],
 							outputs=[predicted_seq_output],
 							flagging_mode='never')
-				
+	
 			with gr.Column(scale=2):
 
-				token_slider = gr.Slider(minimum=0, maximum=0, step=1, 
-							 			label="Pick a token", 
-										info="Submit a sample first")
-
+				token_slider.render()
+				
 				# modifica el slider cuando se hace una nueva prediccion
-				predicted_seq_output.change(fn=lambda prediction : gr.Slider(minimum=0, maximum=len(prediction.split("\t")), step=1, 
-																			label="Pick a token",
-																			info="Select a predicted token to visualize the attention it pays in the input sample"),
+				predicted_seq_output.change(fn=lambda prediction : (gr.Slider(maximum=len(prediction.split("\t")), visible=True),
+																	gr.Slider(visible=True)),
 											inputs=predicted_seq_output, 
-											outputs=token_slider)
+											outputs=[token_slider, intensifier_slider])
 
 				# genera las imagenes cada vez que se mueve el slider
-				@gr.render( inputs	=[predicted_seq_output, token_slider, image_input], 
-			   				triggers=[token_slider.release] )
-				def render_images_display(prediction, slider, image):
+				@gr.render( inputs	=[predicted_seq_output, token_slider, image_input, intensifier_slider],#, selected_tab], 
+			   				triggers=[token_slider.release, intensifier_slider.release] )
+				def render_images_display(prediction, slider, image, intensifier):#, selected_tabb):
+
+					#global curr_tab_selected
+					
+					#print(f"selected {selected_tabb}")
 
 					if len(prediction) != 0:
 
-						print(f"triggered! (value={slider})")
-
-						images = generate_CA_images(slider, image)
+						images = generate_CA_images(slider, image, intensifier)
 
 						gr.Markdown(value="## Contents of the Cross-Attention layers")
 
-						with gr.Tab(f"Overall"):
-							gr.Image(value=images[8])
+						#print(f"sleected tab: {selected_tabb}")
+						#with gr.Tabs(selected=selected_tabb) as tabs:
+						with gr.Tabs() as tabs:
 
-						for i in range(8):  
-							with gr.Tab(f"Layer {i+1}") as tab:
-								gr.Image(value=images[i])
+							with gr.Tab(f"Overall", id="8") as tab_overall:
+								#tab_overall.select( (lambda : gr.Number(value=tab_overall.id)), outputs=selected_tab )
+								gr.Image(value=images[8])
+
+							for i in range(8):  
+								with gr.Tab(f"Layer {i+1}", id=f"{i}") as tab:
+									gr.Image(value=images[i])
+
+							#tab.select( (lambda : gr.Number(tab.id)), outputs=selected_tab )
+							#tabs.select(selected_tabb)
+
+						#tabs.select(  )
 					return
+				
+				intensifier_slider.render()
+
 	return page
 
 if __name__=="__main__":
