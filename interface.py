@@ -65,13 +65,13 @@ def generate_CA_images(token_idx, image, multiplier=1):
 
 	# apply multiplier
 	masks = [ mask*multiplier for mask in masks ]
-	# normalize values above 1
 	
-	masks = [ mask/np.max(mask) if np.max(mask)>1 else mask for mask in masks ]
+	# normalize values above 1
+	masks = [ mask/np.max(mask) if np.max(mask)>1 else mask for mask in masks ] 
 
 	# (convert to values in 0-255)
-	masks = [ (mask*255.0) for mask in masks ]
-	masks = np.round(masks).astype(np.uint8)
+	masks = [ np.round(mask*255.0).astype(np.uint8) for mask in masks ]
+
 
 	# add singleton dimension as channel
 	masks = [ np.expand_dims(mask, axis=-1) for mask in masks ]
@@ -129,9 +129,8 @@ def make_predictions(checkpoint, input_image):
 
 	CA_layers.append(overall)
 
-	return "\t".join(predicted_seq)
-	#return np.array(predicted_seq)
-	#return pd.DataFrame(predicted_seq)
+	#return "\t".join(predicted_seq)
+	return pd.DataFrame(predicted_seq)
 
 def test():
 	print("called test")
@@ -159,67 +158,95 @@ def define_interface():
 									info="Use this slider to intensify the attention values to better see differences",
 									visible=False)
 
+
+	# table
+	token_table = gr.DataFrame(interactive=False)
+
 	with gr.Blocks() as page:
 
-		selected_tab = gr.Number(value=1, visible=False)
-		tabs.select(test)
-		#tabs.select(fn=( lambda : tabs.selected ), outputs=[selected_tab])
-		gr.Markdown("# Cross Attention Viewer")
+		gr.Markdown("# SMT Demonstrator")
 
 		with gr.Row():
 
 			with gr.Column():
 
-				predicted_seq_output.render() #= gr.Textbox(label="Predicted Sequence", interactive=False)
+				#predicted_seq_output.render() #= gr.Textbox(label="Predicted Sequence", interactive=False)
 				#predicted_seq_output = gr.Numpy(label="Predicted sequence", headers=["a", "b"], value=["c", "d"], column_widths="80px" )
 				#predicted_seq_output.style
 				image_input.render()
+				#token_table.render()
 
 				gr.Interface(make_predictions,
 							inputs=[gr.File(label="Model Checkpoint File"),
 									image_input],
-							outputs=[predicted_seq_output],
+							#outputs=[predicted_seq_output],
+							outputs=[token_table],
 							flagging_mode='never')
 	
+
 			with gr.Column(scale=2):
+				
+
+				token_table.change( ( lambda tokens : (gr.Slider(maximum=tokens.shape[0], visible=True), gr.Slider(visible=True)) ),
+					   				inputs=[token_table],
+									outputs=[token_slider, intensifier_slider] )
 
 				token_slider.render()
+
+				tab_selected = gr.Number(value="8", visible=False) # on Overall Attention tab by default
 				
-				# modifica el slider cuando se hace una nueva prediccion
-				predicted_seq_output.change(fn=lambda prediction : (gr.Slider(maximum=len(prediction.split("\t")), visible=True),
-																	gr.Slider(visible=True)),
-											inputs=predicted_seq_output, 
-											outputs=[token_slider, intensifier_slider])
-
 				# genera las imagenes cada vez que se mueve el slider
-				@gr.render( inputs	=[predicted_seq_output, token_slider, image_input, intensifier_slider],#, selected_tab], 
-			   				triggers=[token_slider.release, intensifier_slider.release] )
-				def render_images_display(prediction, slider, image, intensifier):#, selected_tabb):
+				@gr.render( inputs	=[token_table, token_slider, image_input, intensifier_slider, tab_selected],
+							triggers=[token_slider.release, intensifier_slider.release] )
+				def render_images_display(prediction, slider, image, intensifier, tab_no):
 
-					#global curr_tab_selected
-					
-					#print(f"selected {selected_tabb}")
-
-					if len(prediction) != 0:
+					if prediction.shape[0] > 0:
 
 						images = generate_CA_images(slider, image, intensifier)
 
 						gr.Markdown(value="## Contents of the Cross-Attention layers")
 
-						#print(f"sleected tab: {selected_tabb}")
-						#with gr.Tabs(selected=selected_tabb) as tabs:
-						with gr.Tabs() as tabs:
+						print(f"tab_no: {tab_no}")
+
+						with gr.Tabs(selected=f"{tab_no}") as tabs:
 
 							with gr.Tab(f"Overall", id="8") as tab_overall:
-								#tab_overall.select( (lambda : gr.Number(value=tab_overall.id)), outputs=selected_tab )
+								tab_overall.select( (lambda : gr.Number(8)), outputs=[tab_selected] )
 								gr.Image(value=images[8])
 
-							for i in range(8):  
-								with gr.Tab(f"Layer {i+1}", id=f"{i}") as tab:
-									gr.Image(value=images[i])
+							with gr.Tab(f"Layer 1", id=f"0") as tab_1:
+									tab_1.select( (lambda : gr.Number(0)), outputs=[tab_selected] )
+									gr.Image(value=images[0])
 
-							#tab.select( (lambda : gr.Number(tab.id)), outputs=selected_tab )
-							#tabs.select(selected_tabb)
+							with gr.Tab(f"Layer 2", id=f"1") as tab_2:
+									tab_2.select( (lambda : gr.Number(1)), outputs=[tab_selected] )
+									gr.Image(value=images[1])
+
+							with gr.Tab(f"Layer 3", id=f"2") as tab_3:
+									tab_3.select( (lambda : gr.Number(2)), outputs=[tab_selected] )
+									gr.Image(value=images[2])
+
+							with gr.Tab(f"Layer 4", id=f"3") as tab_4:
+									tab_4.select( (lambda : gr.Number(3)), outputs=[tab_selected] )
+									gr.Image(value=images[3])
+
+							with gr.Tab(f"Layer 5", id=f"4") as tab_5:
+									tab_5.select( (lambda : gr.Number(4)), outputs=[tab_selected] )
+									gr.Image(value=images[4])
+
+							with gr.Tab(f"Layer 6", id=f"5") as tab_6:
+									tab_6.select( (lambda : gr.Number(5)), outputs=[tab_selected] )
+									gr.Image(value=images[5])
+
+							with gr.Tab(f"Layer 7", id=f"6") as tab_7:
+									tab_7.select( (lambda : gr.Number(6)), outputs=[tab_selected] )
+									gr.Image(value=images[6])
+
+							with gr.Tab(f"Layer 8", id=f"7") as tab_8:
+									tab_8.select( (lambda : gr.Number(7)), outputs=[tab_selected] )
+									gr.Image(value=images[7])
+
+							
 
 						#tabs.select(  )
 					return
